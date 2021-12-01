@@ -46,6 +46,10 @@ mod select;
 mod ssl;
 #[cfg(all(unix, not(target_os = "redox")))]
 mod termios;
+#[cfg(feature = "wasmedge")]
+mod wasmedge_socket;
+#[cfg(feature = "wasmedge")]
+mod wasmedge_select;
 
 use rustpython_common as common;
 use rustpython_vm as vm;
@@ -105,6 +109,13 @@ pub fn get_module_inits() -> impl Iterator<Item = (Cow<'static, str>, StdlibInit
             "_socket" => socket::make_module,
             "faulthandler" => faulthandler::make_module,
         }
+
+        #[cfg(feature = "wasmedge")]
+        {
+            "select" => wasmedge_select::make_module,
+            "_socket" => wasmedge_socket::make_module,
+        }
+
         #[cfg(feature = "ssl")]
         {
             "_ssl" => ssl::make_module,
