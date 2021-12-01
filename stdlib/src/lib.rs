@@ -14,8 +14,6 @@ mod dis;
 mod gc;
 mod hashlib;
 mod json;
-#[cfg(feature = "rustpython-parser")]
-mod keyword;
 mod math;
 mod platform;
 mod pyexpat;
@@ -83,7 +81,7 @@ pub fn get_module_inits() -> impl Iterator<Item = (Cow<'static, str>, StdlibInit
             "_bisect" => bisect::make_module,
             "cmath" => cmath::make_module,
             "_csv" => csv::make_module,
-            "dis" => dis::make_module,
+            "_dis" => dis::make_module,
             "gc" => gc::make_module,
             "hashlib" => hashlib::make_module,
             "_json" => json::make_module,
@@ -99,10 +97,6 @@ pub fn get_module_inits() -> impl Iterator<Item = (Cow<'static, str>, StdlibInit
         #[cfg(feature = "rustpython-ast")]
         {
             "_ast" => ast::make_module,
-        }
-        #[cfg(feature = "rustpython-parser")]
-        {
-            "keyword" => keyword::make_module,
         }
         #[cfg(any(unix, target_os = "wasi"))]
         {

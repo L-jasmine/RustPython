@@ -4,8 +4,8 @@ use crate::{
         pystr, PyByteArray, PyBytes, PyBytesRef, PyInt, PyIntRef, PyStr, PyStrRef, PyTypeRef,
     },
     cformat::CFormatBytes,
-    function::ArgIterable,
-    function::{OptionalArg, OptionalOption},
+    function::{ArgIterable, OptionalArg, OptionalOption},
+    sequence::{SequenceMutOp, SequenceOp},
     sliceable::PySliceableSequence,
     types::PyComparisonOp,
     utils::Either,
@@ -525,7 +525,16 @@ impl PyBytesInner {
         Ok(self.elements.py_find(&needle, range, find))
     }
 
-    pub fn maketrans(from: PyBytesInner, to: PyBytesInner) -> PyResult<Vec<u8>> {
+    pub fn maketrans(
+        from: PyBytesInner,
+        to: PyBytesInner,
+        vm: &VirtualMachine,
+    ) -> PyResult<Vec<u8>> {
+        if from.len() != to.len() {
+            return Err(
+                vm.new_value_error("the two maketrans arguments must have equal length".to_owned())
+            );
+        }
         let mut res = vec![];
 
         for i in 0..=255 {
@@ -909,8 +918,12 @@ impl PyBytesInner {
             .format(vm, values)
     }
 
-    pub fn repeat(&self, n: usize) -> Vec<u8> {
-        self.elements.repeat(n)
+    pub fn mul(&self, n: isize, vm: &VirtualMachine) -> PyResult<Vec<u8>> {
+        self.elements.mul(vm, n)
+    }
+
+    pub fn imul(&mut self, n: isize, vm: &VirtualMachine) -> PyResult<()> {
+        self.elements.imul(vm, n)
     }
 }
 

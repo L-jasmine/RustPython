@@ -214,7 +214,7 @@ mod builtins {
             let (globals, locals) = match self.globals {
                 Some(globals) => {
                     if !globals.contains_key("__builtins__", vm) {
-                        let builtins_dict = vm.builtins.dict().unwrap().into();
+                        let builtins_dict = vm.builtins.dict().into();
                         globals.set_item("__builtins__", builtins_dict, vm)?;
                     }
                     (
@@ -952,6 +952,9 @@ pub fn make_module(vm: &VirtualMachine, module: PyObjectRef) {
         "zip" => ctx.types.zip_type.clone(),
 
         // Constants
+        "None" => ctx.none(),
+        "True" => ctx.new_bool(true),
+        "False" => ctx.new_bool(false),
         "NotImplemented" => ctx.not_implemented(),
         "Ellipsis" => vm.ctx.ellipsis.clone(),
 

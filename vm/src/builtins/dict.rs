@@ -1,9 +1,9 @@
 use super::{
     set::PySetInner, IterStatus, PositionIterInternal, PyBaseExceptionRef, PyGenericAlias, PySet,
-    PyStrRef, PyTypeRef,
+    PyStrRef, PyTupleRef, PyTypeRef,
 };
 use crate::{
-    builtins::PyTuple,
+    builtins::{iter::builtins_iter, PyTuple},
     common::ascii,
     dictdatatype::{self, DictKey},
     function::{ArgIterable, FuncArgs, IntoPyObject, KwArgs, OptionalArg},
@@ -63,6 +63,12 @@ impl PyDict {
 #[allow(clippy::len_without_is_empty)]
 #[pyimpl(with(AsMapping, Hashable, Comparable, Iterable), flags(BASETYPE))]
 impl PyDict {
+    /// escape hatch to access the underlying data structure directly. prefer adding a method on
+    /// PyDict instead of using this
+    pub(crate) fn _as_dict_inner(&self) -> &DictContentType {
+        &self.entries
+    }
+
     #[pyslot]
     fn slot_new(cls: PyTypeRef, _args: FuncArgs, vm: &VirtualMachine) -> PyResult {
         PyDict::default().into_pyresult_with_type(vm, cls)
@@ -771,6 +777,21 @@ macro_rules! dict_view {
             #[pymethod(magic)]
             fn length_hint(&self) -> usize {
                 self.internal.lock().length_hint(|_| self.size.entries_size)
+            }
+
+            #[allow(clippy::redundant_closure_call)]
+            #[pymethod(magic)]
+            fn reduce(zelf: PyRef<Self>, vm: &VirtualMachine) -> PyTupleRef {
+                let iter = builtins_iter(vm).to_owned();
+                let internal = zelf.internal.lock();
+                let entries = match &internal.status {
+                    IterStatus::Active(dict) => dict
+                        .into_iter()
+                        .map(|(key, value)| ($result_fn)(vm, key, value))
+                        .collect::<Vec<_>>(),
+                    IterStatus::Exhausted => vec![],
+                };
+                vm.new_tuple((iter, (vm.ctx.new_list(entries),)))
             }
         }
         impl Unconstructible for $iter_name {}

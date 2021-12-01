@@ -438,8 +438,6 @@ class CallableTests(BaseTestCase):
         self.assertNotEqual(Callable[[int], int], Callable[[], int])
         self.assertNotEqual(Callable[[int], int], Callable)
 
-    # TODO: RUSTPYTHON
-    @unittest.expectedFailure
     def test_cannot_instantiate(self):
         with self.assertRaises(TypeError):
             Callable()
@@ -741,8 +739,6 @@ class ProtocolTests(BaseTestCase):
 
         self.assertIsInstance(CG[int](), CG)
 
-    # TODO: RUSTPYTHON
-    @unittest.expectedFailure
     def test_cannot_instantiate_abstract(self):
         @runtime_checkable
         class P(Protocol):
@@ -3291,8 +3287,6 @@ class CollectionsAbcTests(BaseTestCase):
         g = foo()
         self.assertIsSubclass(type(g), typing.Generator)
 
-    # TODO: RUSTPYTHON
-    @unittest.expectedFailure
     def test_no_generator_instantiation(self):
         with self.assertRaises(TypeError):
             typing.Generator()
@@ -3308,8 +3302,6 @@ class CollectionsAbcTests(BaseTestCase):
         g = ns['f']()
         self.assertIsSubclass(type(g), typing.AsyncGenerator)
 
-    # TODO: RUSTPYTHON
-    @unittest.expectedFailure
     def test_no_async_generator_instantiation(self):
         with self.assertRaises(TypeError):
             typing.AsyncGenerator()
@@ -3739,8 +3731,6 @@ class TypedDictTests(BaseTestCase):
         self.assertEqual(Emp.__annotations__, {'name': str, 'id': int})
         self.assertEqual(Emp.__total__, True)
 
-    # TODO: RUSTPYTHON
-    @unittest.expectedFailure
     def test_typeddict_special_keyword_names(self):
         TD = TypedDict("TD", cls=type, self=object, typename=str, _typename=int, fields=list, _fields=dict)
         self.assertEqual(TD.__name__, 'TD')

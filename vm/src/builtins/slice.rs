@@ -194,6 +194,20 @@ impl PySlice {
         let (start, stop, step) = self.inner_indices(length, vm)?;
         Ok(vm.new_tuple((start, stop, step)))
     }
+
+    #[allow(clippy::type_complexity)]
+    #[pymethod(magic)]
+    fn reduce(
+        zelf: PyRef<Self>,
+    ) -> PyResult<(
+        PyTypeRef,
+        (Option<PyObjectRef>, PyObjectRef, Option<PyObjectRef>),
+    )> {
+        Ok((
+            zelf.clone_class(),
+            (zelf.start.clone(), zelf.stop.clone(), zelf.step.clone()),
+        ))
+    }
 }
 
 impl Comparable for PySlice {
@@ -354,13 +368,15 @@ impl SaturatedSliceIter {
 
 impl Iterator for SaturatedSliceIter {
     type Item = usize;
+
     fn next(&mut self) -> Option<Self::Item> {
         if self.len == 0 {
             return None;
         }
         self.len -= 1;
         let ret = self.index as usize;
-        self.index += self.step;
+        // SAFETY: if index is overflowed, len should be zero
+        self.index = self.index.wrapping_add(self.step);
         Some(ret)
     }
 }

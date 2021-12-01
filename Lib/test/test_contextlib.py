@@ -7,6 +7,7 @@ import threading
 import unittest
 from contextlib import *  # Tests __all__
 from test import support
+from test.support import os_helper
 import weakref
 
 
@@ -20,8 +21,6 @@ class TestAbstractContextManager(unittest.TestCase):
         manager = DefaultEnter()
         self.assertIs(manager.__enter__(), manager)
 
-    # TODO: RUSTPYTHON
-    @unittest.expectedFailure
     def test_exit_is_abstract(self):
         class MissingExit(AbstractContextManager):
             pass
@@ -331,7 +330,7 @@ class FileContextTestCase(unittest.TestCase):
                     1 / 0
             self.assertTrue(f.closed)
         finally:
-            support.unlink(tfn)
+            os_helper.unlink(tfn)
 
 class LockContextTestCase(unittest.TestCase):
 
