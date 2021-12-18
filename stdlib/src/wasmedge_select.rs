@@ -32,7 +32,7 @@ mod decl {
     }
 
     #[pyattr]
-    use libc::{POLLERR, POLLHUP, POLLIN, POLLNVAL, POLLOUT};
+    use libc::{POLLERR, POLLHUP, POLLIN, POLLIN as POLLPRI, POLLNVAL, POLLOUT};
     use rustpython_vm::builtins::PyListRef;
 
     pub(super) mod poll {

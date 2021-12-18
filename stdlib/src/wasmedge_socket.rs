@@ -312,11 +312,16 @@ mod wasmedge_sock {
         }
 
         pub fn take_error(&self) -> io::Result<()> {
+            use super::socket_types as s;
             unsafe {
                 let fd = self.0;
-                let res = sock_get_error(fd as u32);
-                if res == 0 {
+                let mut error = 0;
+                let mut len = std::mem::size_of::<i32>() as u32;
+                let res = sock_getsockopt(fd as u32,s::SOL_SOCKET, s::SO_ERROR,&mut error,&mut len);
+                if res == 0 && error == 0 {
                     Ok(())
+                } else if res == 0 && error != 0 {
+                    Err(io::Error::from_raw_os_error(error))
                 } else {
                     Err(io::Error::from_raw_os_error(res as i32))
                 }
@@ -333,13 +338,17 @@ mod wasmedge_sock {
             use super::socket_types::*;
             unsafe {
                 let flags = match how {
-                    Shutdown::Read => 1,//__WASI_SDFLAGS_RD
-                    Shutdown::Write => 2,//__WASI_SDFLAGS_WR
-                    Shutdown::Both => 3,//__WASI_SDFLAGS_RD | __WASI_SDFLAGS_WR
+                    Shutdown::Read => 1,  //__WASI_SDFLAGS_RD
+                    Shutdown::Write => 2, //__WASI_SDFLAGS_WR
+                    Shutdown::Both => 3,  //__WASI_SDFLAGS_RD | __WASI_SDFLAGS_WR
                 };
-                sock_shutdown(self.as_raw_fd() as u32, flags as u8);
+                let res = sock_shutdown(self.as_raw_fd() as u32, flags as u8);
+                if res == 0 {
+                    Ok(())
+                } else {
+                    Err(io::Error::from_raw_os_error(res as i32))
+                }
             }
-            Ok(())
         }
     }
 
@@ -383,7 +392,14 @@ mod wasmedge_sock {
         ) -> u32;
         // pub fn sock_send_to(fd: u32, buf: *const u8, buf_len: u32, addr: *const u8, addr_len: u32, flags: u16, ) -> u32;
         pub fn sock_shutdown(fd: u32, flags: u8) -> u32;
-        pub fn sock_get_error(fd: u32) -> u32;
+        pub fn sock_getsockopt(
+            fd: u32,
+            level: i32,
+            name: i32,
+            flag: *mut i32,
+            flag_size: *mut u32,
+        ) -> u32;
+        pub fn sock_setsockopt(fd: u32, level: i32, name: i32, flag: *const i32, flag_size: u32) -> u32;
         pub fn sock_get_local(
             fd: u32,
             addr: *mut WasiAddress,
@@ -414,12 +430,22 @@ mod socket_types {
     pub const MSG_PEEK: i32 = 2;
     pub const MSG_WAITALL: i32 = 0x100;
 
-    pub const SHUT_RD: i32 = 0;
-    pub const SHUT_WR: i32 = 1;
-    pub const SHUT_RDWR: i32 = 2;
+    pub const SHUT_RD: i32 = 1;
+    pub const SHUT_WR: i32 = 2;
+    pub const SHUT_RDWR: i32 = 3;
 
     pub const SOCK_STREAM: i32 = 1;
     // pub const SOCK_DGRAM: i32 = 2;
+
+    pub const SOL_SOCKET: i32 = 1;
+    pub const SO_REUSEADDR: i32 = 2;
+    pub const SO_TYPE: i32 = 3;
+    pub const SO_ERROR: i32 = 4;
+    pub const SO_BROADCAST: i32 = 6;
+    pub const SO_OOBINLINE: i32 = 10;
+    pub const SO_LINGER: i32 = 13;
+
+    pub const TCP_NODELAY: i32 = 1;
 }
 
 #[pymodule]
@@ -455,7 +481,8 @@ mod _socket {
     #[pyattr]
     use super::socket_types::{
         AF_INET, IPPROTO_TCP, IPPROTO_TCP as SOL_TCP, MSG_OOB, MSG_PEEK, MSG_WAITALL, SHUT_RD,
-        SHUT_RDWR, SHUT_WR, SOCK_STREAM,
+        SHUT_RDWR, SHUT_WR, SOCK_STREAM, SOL_SOCKET, SO_BROADCAST, SO_ERROR, SO_LINGER,
+        SO_OOBINLINE, SO_REUSEADDR, SO_TYPE, TCP_NODELAY,
     };
 
     #[pyattr]
@@ -1108,7 +1135,39 @@ mod _socket {
             buflen: OptionalArg<i32>,
             vm: &VirtualMachine,
         ) -> PyResult {
-            return Err(vm.new_os_error("getsockopt no support".to_owned()));
+            let fd = self.sock.read().fd() as _;
+            let buflen = buflen.unwrap_or(0);
+            if buflen == 0 {
+                let mut flag: libc::c_int = 0;
+                let mut flagsize = std::mem::size_of::<libc::c_int>() as _;
+                let ret = unsafe {
+                    s::sock_getsockopt(
+                        fd,
+                        level,
+                        name,
+                        &mut flag as *mut libc::c_int as *mut _,
+                        &mut flagsize,
+                    )
+                };
+                if ret != 0 {
+                    return Err(io::Error::from_raw_os_error(ret as i32).into_pyexception(vm));
+                }
+                Ok(vm.ctx.new_int(flag).into())
+            } else {
+                if buflen <= 0 || buflen > 1024 {
+                    return Err(vm.new_os_error("getsockopt buflen out of range".to_owned()));
+                }
+                let mut buf = vec![0u8; buflen as usize];
+                let mut buflen = buflen as _;
+                let ret = unsafe {
+                    s::sock_getsockopt(fd, level, name, buf.as_mut_ptr() as *mut _, &mut buflen)
+                };
+                buf.truncate(buflen as usize);
+                if ret != 0 {
+                    return Err(io::Error::from_raw_os_error(ret as i32).into_pyexception(vm));
+                }
+                Ok(vm.ctx.new_bytes(buf).into())
+            }
         }
 
         #[pymethod]
@@ -1120,7 +1179,34 @@ mod _socket {
             optlen: OptionalArg<u32>,
             vm: &VirtualMachine,
         ) -> PyResult<()> {
-            Ok(())
+            let fd = self.sock.read().fd() as _;
+            let ret = match (value, optlen) {
+                (Some(Either::A(b)), OptionalArg::Missing) => b.with_ref(|b| unsafe {
+                    s::sock_setsockopt(fd, level, name, b.as_ptr() as *const _, b.len() as _)
+                }),
+                (Some(Either::B(ref val)), OptionalArg::Missing) => unsafe {
+                    s::sock_setsockopt(
+                        fd,
+                        level,
+                        name,
+                        val as *const i32 as *const _,
+                        std::mem::size_of::<i32>() as _,
+                    )
+                },
+                (None, OptionalArg::Present(optlen)) => unsafe {
+                    s::sock_setsockopt(fd, level, name, std::ptr::null(), optlen as _)
+                },
+                _ => {
+                    return Err(
+                        vm.new_type_error("expected the value arg xor the optlen arg".to_owned())
+                    );
+                }
+            };
+            if ret != 0 {
+                Err(io::Error::from_raw_os_error(ret as i32).into_pyexception(vm))
+            } else {
+                Ok(())
+            }
         }
 
         #[pymethod]
